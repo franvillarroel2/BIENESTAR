@@ -158,7 +158,6 @@
     const { createClient } = supabase;
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Verificar sesión
     async function verificarSesion() {
       const { data: { session } } = await supabaseClient.auth.getSession();
       
