@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel de Monitoreo - BIENESTAR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Montserrat', sans-serif;
+      background-color: #f4f4f4;
+      color: #222;
+    }
+
+    header {
+      background-color: #f4b626;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+    }
+
+    header img {
+      height: 60px;
+      margin-right: 1rem;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.8rem;
+    }
+
+    main {
+      padding: 2rem;
+    }
+
+    #user-id {
+      font-size: 1.2rem;
+      margin-bottom: 2rem;
+      font-weight: bold;
+      color: #555;
+    }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .sensor-card {
+      background-color: white;
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: center;
+      transition: transform 0.2s;
+    }
+
+    .sensor-card:hover {
+      transform: scale(1.02);
+    }
+
+    .sensor-card h3 {
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    .sensor-card p {
+      font-size: 1.6rem;
+      font-weight: bold;
+    }
+
+    #map {
+      height: 300px;
+      margin-top: 2rem;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1rem;
+      background-color: #f4b626;
+      color: #333;
+      margin-top: 3rem;
+      font-weight: bold;
+    }
+
+    #logout-btn {
+      background: none;
+      border: none;
+      font-size: 1.4rem;
+      cursor: pointer;
+      color: #333;
+      margin-left: auto;
+      padding: 0.5rem 1rem;
+      transition: color 0.2s;
+    }
+
+    #logout-btn:hover {
+      color: #000;
+    }
+
+    
+  </style>
+</head>
+<body>
+  <header>
+  <img src="logo.png" alt="Logo">
+  <h1 style="flex: 1;">Panel de Monitoreo</h1>
+  <button id="logout-btn" title="Cerrar sesión">🔒</button>
+  
+</header>
+
+  <main>
+    <div id="user-id">Cargando ID...</div>
+
+    <div class="sensor-grid">
+      <div class="sensor-card">
+        <h3>🌡️ Temperatura</h3>
+        <p id="sensor-temp">--</p>
+      </div>
+      <div class="sensor-card">
+        <h3>💧 Humedad</h3>
+        <p id="sensor-hum">--</p>
+      </div>
+      <div class="sensor-card">
+        <h3>🌫️ Nivel de gas</h3>
+        <p id="sensor-gas">--</p>
+      </div>
+      <div class="sensor-card">
+        <h3>🔊 Nivel de sonido</h3>
+        <p id="sensor-sonido">--</p>
+      </div>
+    </div>
+
+    <div id="map"></div>
+  </main>
+
+  <footer>
+    © 2025 BIENESTAR | Proyecto Final UTN - Francisco Villarroel
+  </footer>
+
+  <!-- Librería Leaflet -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // Inicializar cliente de Supabase
+    const SUPABASE_URL = "https://jiqosraffpgnhsxcksik.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImppcW9zcmFmZnBnbmhzeGNrc2lrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzg3MDcsImV4cCI6MjA5NzgxNDcwN30.KgxwAulo-iq2bGjwiQzC2ehWrQkOwdsMzkPUHI_tRe0";
+    
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Verificar sesión
+    async function verificarSesion() {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      
+      if (!session) {
+        alert("⚠️ Sesión expirada. Redirigiendo al inicio.");
+        window.location.href = "index.html";
+        return null;
+      }
+      
+      return session;
+    }
+
+    async function inicializarPanel() {
+      const session = await verificarSesion();
+      if (!session) return;
+
+      const userID = localStorage.getItem("usuarioID");
+      const userEmail = localStorage.getItem("usuarioEmail");
+
+      if (!userID) {
+        alert("⚠️ ID de dispositivo no encontrado. Redirigiendo al inicio.");
+        window.location.href = "index.html";
+        return;
+      }
+
+      document.getElementById("user-id").textContent = `Usuario: ${userEmail} | ID del dispositivo: ${userID}`;
+
+      const ESP_IP = "http://127.0.0.1:8000/data"; // ← Cambia esto por la IP real de tu ESP8266
+
+      async function cargarDatos() {
+        try {
+          const response = await fetch(`${ESP_IP}`);
+          const data = await response.json();
+          console.log("DATA: ", data)
+          document.getElementById("sensor-temp").textContent = `${data.at(-1).temperatura} °C`;
+          document.getElementById("sensor-hum").textContent = `${data.at(-1).humedad} %`;
+          document.getElementById("sensor-gas").textContent = `${data.at(-1).gas} ppm`;
+          document.getElementById("sensor-sonido").textContent = `${data.at(-1).sonido} V`;
+
+          // Coordenadas predeterminadas por ahora
+          /*const coordenadas = [-33.658957, -69.147912];
+          const mapa = L.map('map').setView(coordenadas, 14);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(mapa);
+          L.marker(coordenadas).addTo(mapa).bindPopup(`Dispositivo ${userID}`).openPopup(); */
+        } catch (err) {
+          console.error("Error al cargar datos desde ESP8266:", err);
+          alert("❌ No se pudo conectar con el dispositivo.");
+        }
+      }
+
+      cargarDatos();
+      setInterval(cargarDatos, 10000); // Actualiza cada 10 segundos
+
+      // Cerrar sesión
+      document.getElementById("logout-btn").addEventListener("click", async () => {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          alert("❌ Error al cerrar sesión: " + error.message);
+          return;
+        }
+        localStorage.clear();
+        window.location.href = "index.html";
+      });
+    }
+
+    // Inicializar panel cuando se carga la página
+    window.addEventListener("load", inicializarPanel);
+  </script>
+</body>
+</html>
