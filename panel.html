@@ -183,15 +183,15 @@
         return;
       }
 
-      document.getElementById("user-id").textContent = `Usuario: ${userEmail} | ID del dispositivo: ${userID}`;
-
+      
       const ESP_IP = "http://127.0.0.1:8000/data"; // ← Cambia esto por la IP real de tu ESP8266
-
+      
       async function cargarDatos() {
         try {
           const response = await fetch(`${ESP_IP}`);
           const data = await response.json();
           console.log("DATA: ", data)
+          document.getElementById("user-id").textContent = `Usuario: ${userEmail} | ID del dispositivo: ${data.at(-1).nodo_id}`;
           document.getElementById("sensor-temp").textContent = `${data.at(-1).temperatura} °C`;
           document.getElementById("sensor-hum").textContent = `${data.at(-1).humedad} %`;
           document.getElementById("sensor-gas").textContent = `${data.at(-1).gas} ppm`;
