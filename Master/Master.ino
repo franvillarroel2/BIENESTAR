@@ -17,7 +17,7 @@ const char* ssid     = "Villarroel";
 const char* password = "42751348";
 
 // Dirección IP de tu computadora donde corre la API (Modificar de ser necesario)
-const char* api_url  = "http://192.168.100.5:8000/data";
+const char* api_url  = "http://127.0.0.1:8000/data";
 
 /**
  * Función para extraer los datos del String recibido por LoRa.
@@ -82,66 +82,47 @@ void setup() {
 }
 
 void loop() {
-  // Verificación manual por sondeo del pin D2
-  if (digitalRead(RADIO_DIO0) == HIGH) {
-    String payload;
-    int state = radio.readData(payload);
+  // Datos a enviar a la API
+  int nodo_id = 1;
+  float temperatura = 25.9;
+  int humedad = 33;
+  bool presencia = true;
+  int gas = 3333;
 
-    if (state == RADIOLIB_ERR_NONE) {
-      Serial.println("\n--- Nuevo paquete recibido ---");
-      Serial.println("Payload: " + payload);
+  // Estructura del JSON
+  String json = "{"
+    "\"nodo_id\":" + String(nodo_id) + ","
+    "\"temperatura\":" + String(temperatura, 1) + ","
+    "\"humedad\":" + String(humedad) + ","
+    "\"presencia\":" + String(presencia ? "true" : "false") + ","
+    "\"gas\":" + String(gas) +
+  "}";
 
-      float t, h, f, a;
-      int g, id;
+  // Envío de datos HTTP a la API local si hay red disponible
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient client;
+    HTTPClient http;
 
-      if (parsePayload(payload, id, t, h, f, a, g)) {
-        // Estructuramos el valor booleano en formato JSON válido
-        String presenciaVal = (f > 0.5) ? "true" : "false";
+    http.begin(client, api_url);
+    http.setTimeout(5000); // Evitamos bloqueos prolongados de red
+    http.addHeader("Content-Type", "application/json");
 
-        // Creamos el JSON con la estructura exacta que espera tu Pydantic BaseModel
-        String json = "{"
-          "\"nodo_id\":" + String(id) + "," 
-          "\"temperatura\":" + String(t, 1) + ","
-          "\"humedad\":" + String(h, 1) + ","
-          "\"presencia\":" + presenciaVal + ","
-          "\"gas\":" + String(g) +
-        "}";
+    Serial.println("\n--- Enviando datos a API ---");
+    Serial.println("JSON: " + json);
+    int httpCode = http.POST(json);
 
-        // Envío de datos HTTP a la API local si hay red disponible
-        if (WiFi.status() == WL_CONNECTED) {
-          WiFiClient client;
-          HTTPClient http;
-
-          http.begin(client, api_url);
-          http.setTimeout(5000); // Evitamos bloqueos prolongados de red
-          http.addHeader("Content-Type", "application/json");
-
-          Serial.println("Enviando a API Local: " + json);
-          int httpCode = http.POST(json);
-
-          if (httpCode > 0) {
-            Serial.println("Respuesta del servidor: " + String(httpCode));
-          } else {
-            Serial.println("Error HTTP: " + http.errorToString(httpCode));
-          }
-          http.end();
-        } else {
-          Serial.println("Error: WiFi desconectado. No se puede reportar a la API.");
-        }
-      } else {
-        Serial.println("Error: Formato de mensaje LoRa inválido.");
-      }
-    } 
-    else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-      Serial.println("\n[Aviso]: Error de CRC en el aire.");
+    if (httpCode > 0) {
+      Serial.println("✅ Respuesta del servidor: " + String(httpCode));
+    } else {
+      Serial.println("❌ Error HTTP: " + http.errorToString(httpCode));
     }
-    else {
-      Serial.println("\nError al leer búfer LoRa: " + String(state));
-    }
-
-    // Reactivamos la escucha continua inmediatamente
-    radio.startReceive();
+    http.end();
+  } else {
+    Serial.println("❌ Error: WiFi desconectado. No se puede reportar a la API.");
   }
+
+  // Esperar 10 segundos antes de enviar nuevamente
+  delay(10000);
 
   // Garantiza estabilidad de las tareas de segundo plano de la pila de red del chip
   yield();
